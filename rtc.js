@@ -4,19 +4,27 @@ var servers = {
 
 module.exports = exports = RTC = {}; 
 
-var constraints = {
+var offerConstraints = {
+    'optional':[], 
+    'mandatory':{}
+}
+var sdpconstraints = {
     'mandatory':{
         'OfferToReceiveAudio':true, 
         'OfferToReceiveVideo':true}}; 
-var socket;  
+var socket
+  , msgQueue =[]; 
 
 RTC.prototype.init = function(options){
-    RTC.localStream = options.localStream; 
-    RTC.remoteVideo = options.remoteVideo; 
+    RTC.localVideo = document.getElementById(options.localVideo); 
+    RTC.remoteVideo = document.getElementById(options.remoteVideo); 
     RTC.constraints = options.constraints; 
     RTC.miniVideo = options.miniVideo; 
 
     this.socket = io.connect(options.signalingServer); 
+    this.handler = {
+        'socketMessage':onSocketMessage
+    }
 }
 RTC.prototype.setTurnServer = function(turn){
     var turnServer = turn; 
@@ -31,16 +39,46 @@ RTC.prototype.setTurnServer = function(turn){
     }
 
     var iceServer = createIceServer(turnServer.uris[0], turnServer.username, 
-            turnServer.password); 
+                                    turnServer.password); 
     if(iceServer != null){
         servers.iceServers.push(iceServer); 
     }
 }
-RTC.prototype.attachElement = function(local remote){
+//LOCAL RIGHT NOW
+RTC.prototype.attachElements = function(local, remote, options){
+    var mediaConstraints = {
+        'audio':true, 
+        'video':{
+            'mandatory':{}, 
+            'optional':[]
+        }
+    }; 
+
+    try{
+        getUserMedia(mediaConstraints, onUserMediaSuccess, 
+                     onUserMediaError); 
+    }catch(e){
+        console.log(e.message); 
+    }
 
 }
 RTC.prototype.startCall = function(){
-    if(socket &&)
+    initiator = true; 
+    if(socket &&){
+    }
+    createPeerConnection(); 
+    this.RTC.peerConnection.addStream(this.RTC.localStream); 
+
+    createOffer(); 
+}
+function onSocketMessage(packet){
+    var pkt = JSON.parse(packet); 
+
+    if(pkt.type == 'offer'){
+        msgQueue.unshift(pkt); 
+    }else{//jfkdsljflksdfkdjfsflkdjsjkl
+        msgQueue.push(pkt); 
+    }
 }
 function call(){
     console.log('Creating PeerConnection'); 
@@ -48,13 +86,31 @@ function call(){
 }
 function createPeerConnection(){
     try{
-        pc = new RTCPeerConnection(server, constraints); 
-        pc.onicecanidate = onIceCandidate;  
+        this.RTC.peerConnection = new RTCPeerConnection(server, constraints); 
+        this.RTC.peerConnection.onicecanidate = onIceCandidate;  
     }catch(e){
        //peer connection failed 
     }
-    pc.onaddstream      = onRemoteStreamAdded; 
-    pc.onremovestream   = onRemoteStreamRemoved; 
+    this.RTC.peerConnection.onaddstream      = onRemoteStreamAdded; 
+    this.RTC.peerConnection.onremovestream   = onRemoteStreamRemoved; 
+}
+function createOffer(){
+    var constraints = mergeConstraints(this.OfferConstraints, 
+                                       this.sdpConstraints); 
+    this.RTC.peerConnection.createOffer(setLocalAndSendMessage, null, constraints); 
+}
+function setLocalAndSendMessage(descriptor){
+    descriptor.sdp = preferOpus(descriptor.sdp); 
+    this.RTC.peerConnection.seLocalDescription(descriptor); 
+    sendMessage(descriptor); 
+}
+function mergeConstrains(cons1, cons2){
+    var merge = cons1; 
+    for(var name in cons2.mandatory){
+        merged.mandatory[name] = cons2.manadatory[name]; 
+    }
+    merged.optional.concat(cons2.optional); 
+    return merged; 
 }
 function onIceCandidate(event) {
     if (event.candidate) {
@@ -65,4 +121,12 @@ function onIceCandidate(event) {
     } else {
       console.log('End of candidates.');
     }
+}
+function onUserMediaSuccess(stream){
+    attachMediaStream(this.RTC.localVideo, stream); 
+    localVideo.style.opacity = 1; 
+    this.RTC.localStream = stream; 
+}
+function onUserMediaError(error){
+    console.log("There was an error!")
 }
