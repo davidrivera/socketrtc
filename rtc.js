@@ -14,7 +14,7 @@ var sdpconstraints = {
         'OfferToReceiveVideo':true}}; 
 var socket
   , msgQueue =[]; 
-
+var stereo = false;
 RTC.prototype.init = function(options){
     RTC.localVideo = document.getElementById(options.localVideo); 
     RTC.remoteVideo = document.getElementById(options.remoteVideo); 
@@ -136,10 +136,6 @@ function onUserMediaError(error){
     console.log("There was an error!")
 }
 function processSignalingMessage(message){
-    if (!started) {
-      console.log('peerConnection has not been created yet!');
-      return;
-    }
 
     if (message.type === 'offer') {
       // Set Opus in Stereo, if stereo enabled.
@@ -160,3 +156,81 @@ function processSignalingMessage(message){
       onRemoteHangup();
     }
 }
+// Set Opus as the default audio codec if it's present.
+  function preferOpus(sdp) {
+    var sdpLines = sdp.split('\r\n');
+
+    // Search for m line.
+    for (var i = 0; i < sdpLines.length; i++) {
+        if (sdpLines[i].search('m=audio') !== -1) {
+          var mLineIndex = i;
+          break;
+        }
+    }
+    if (mLineIndex === null)
+      return sdp;
+
+    // If Opus is available, set it as the default in m line.
+    for (var i = 0; i < sdpLines.length; i++) {
+      if (sdpLines[i].search('opus/48000') !== -1) {
+        var opusPayload = extractSdp(sdpLines[i], /:(\d+) opus\/48000/i);
+        if (opusPayload)
+          sdpLines[mLineIndex] = setDefaultCodec(sdpLines[mLineIndex],
+                                                 opusPayload);
+        break;
+      }
+    }
+
+    // Remove CN in m line and sdp.
+    sdpLines = removeCN(sdpLines, mLineIndex);
+
+    sdp = sdpLines.join('\r\n');
+    return sdp;
+  }
+  function extractSdp(sdpLine, pattern) {
+    var result = sdpLine.match(pattern);
+    return (result && result.length == 2)? result[1]: null;
+  }
+function addStereo(sdp) {
+    var sdpLines = sdp.split('\r\n');
+
+    // Find opus payload.
+    for (var i = 0; i < sdpLines.length; i++) {
+      if (sdpLines[i].search('opus/48000') !== -1) {
+        var opusPayload = extractSdp(sdpLines[i], /:(\d+) opus\/48000/i);
+        break;
+      }
+    }
+
+    // Find the payload in fmtp line.
+    for (var i = 0; i < sdpLines.length; i++) {
+      if (sdpLines[i].search('a=fmtp') !== -1) {
+        var payload = extractSdp(sdpLines[i], /a=fmtp:(\d+)/ );
+        if (payload === opusPayload) {
+          var fmtpLineIndex = i;
+          break;
+        }
+      }
+    }
+    // No fmtp line found.
+    if (fmtpLineIndex === null)
+      return sdp;
+
+    // Append stereo=1 to fmtp line.
+    sdpLines[fmtpLineIndex] = sdpLines[fmtpLineIndex].concat(' stereo=1');
+
+    sdp = sdpLines.join('\r\n');
+    return sdp;
+  }
+function setDefaultCodec(mLine, payload) {
+    var elements = mLine.split(' ');
+    var newLine = new Array();
+    var index = 0;
+    for (var i = 0; i < elements.length; i++) {
+      if (index === 3) // Format of media starts from the fourth.
+        newLine[index++] = payload; // Put target payload to the first.
+      if (elements[i] !== payload)
+        newLine[index++] = elements[i];
+    }
+    return newLine.join(' ');
+  }
