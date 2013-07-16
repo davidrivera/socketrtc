@@ -71,6 +71,11 @@ RTC.prototype.startCall = function(){
 
     createOffer(); 
 }
+RTC.prototype.pickUp = function(){
+    while (msgQueue.length > 0) {
+      processSignalingMessage(msgQueue.shift());
+    }
+}
 function onSocketMessage(packet){
     var pkt = JSON.parse(packet); 
 
@@ -129,4 +134,29 @@ function onUserMediaSuccess(stream){
 }
 function onUserMediaError(error){
     console.log("There was an error!")
+}
+function processSignalingMessage(message){
+    if (!started) {
+      console.log('peerConnection has not been created yet!');
+      return;
+    }
+
+    if (message.type === 'offer') {
+      // Set Opus in Stereo, if stereo enabled.
+      if (stereo)
+        message.sdp = addStereo(message.sdp);
+      this.RTC.peerConnection.setRemoteDescription(new RTCSessionDescription(message));
+      doAnswer();
+    } else if (message.type === 'answer') {
+      // Set Opus in Stereo, if stereo enabled.
+      if (stereo)
+        message.sdp = addStereo(message.sdp);
+      this.RTC.peerConnection.setRemoteDescription(new RTCSessionDescription(message));
+    } else if (message.type === 'candidate') {
+      var candidate = new RTCIceCandidate({sdpMLineIndex: message.label,
+                                           candidate: message.candidate});
+      this.RTC.peerConnection.addIceCandidate(candidate);
+    } else if (message.type === 'bye') {
+      onRemoteHangup();
+    }
 }
