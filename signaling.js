@@ -2,6 +2,7 @@ var io = require('socket.io').listen(3000)
   , clients = [];
 
 io.enable('browser client minification'); 
+io.static.add('/path/for/socketRTC.client.js',{file:'file.js'});
 
 io.sockets.on('connection', function(socket){
     var addr = socket.handshake.address
